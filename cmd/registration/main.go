@@ -44,5 +44,5 @@ func main() {
 
 func commandLineInput() string {
 	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	return strings.TrimSuffix(input, "\n")
+	return strings.TrimSuffix(strings.TrimSuffix(input, "\n"), "\r")
 }
