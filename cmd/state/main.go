@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/salex.org/hmip-go-client/pkg/hmip"
+	"github.com/salex-org/hmip-go-client/pkg/hmip"
 	"log"
 )
 
