@@ -9,7 +9,7 @@ reverse engineering. **Use this library at your own risk!**
 Run the follwing command to install the library in your GO module:
 
 ```shell
-go get github.com/salex.org/hmip-go-client
+go get github.com/salex-org/hmip-go-client
 ```
 
 # Loading the configuration and getting the current state
