@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -72,8 +73,32 @@ type ClientCharacteristics struct {
 }
 
 type State struct {
-	Devices map[string]any `json:"devices"`
-	Clients map[string]any `json:"clients"`
+	Devices map[string]Device             `json:"devices"`
+	Clients map[string]ClientRegistration `json:"clients"`
+}
+
+type Device struct {
+	ID               string                       `json:"id"`
+	Name             string                       `json:"label"`
+	Type             string                       `json:"type"`
+	Model            string                       `json:"modelType"`
+	SGTIN            string                       `json:"serializedGlobalTradeItemNumber"`
+	Channels         map[string]FunctionalChannel `json:"functionalChannels"`
+	LastStatusUpdate HomematicTimestamp           `json:"lastStatusUpdate"`
+}
+
+type FunctionalChannel struct {
+	Type         string  `json:"functionalChannelType"`
+	Temperature  float64 `json:"actualTemperature,omitempty"`
+	Humidity     int     `json:"humidity,omitempty"`
+	VapourAmount float64 `json:"vaporAmount,omitempty"`
+}
+
+type ClientRegistration struct {
+	ID       string             `json:"id"`
+	Name     string             `json:"label"`
+	Created  HomematicTimestamp `json:"createdAtTimestamp"`
+	LastSeen HomematicTimestamp `json:"lastSeenAtTimestamp"`
 }
 
 type Client struct {
@@ -92,6 +117,22 @@ type Config struct {
 	ClientID          string
 	ClientAuthToken   string
 	AuthToken         string
+}
+
+type HomematicTimestamp time.Time
+
+func (t *HomematicTimestamp) MarshalJSON() ([]byte, error) {
+	s := strconv.Itoa(int(time.Time(*t).Unix()))
+	return []byte(s), nil
+}
+
+func (t *HomematicTimestamp) UnmarshalJSON(value []byte) error {
+	unix, err := strconv.Atoi(string(value))
+	if err != nil {
+		return err
+	}
+	*t = HomematicTimestamp(time.Unix(int64(unix), 0))
+	return nil
 }
 
 type HomematicRoundTripper struct {
