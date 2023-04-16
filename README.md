@@ -19,11 +19,11 @@ First set the following environment variables for the HmIP-Client to connect to 
 | | |
 | HMIP_AP_SGTIN | The SGTIN of your Access Point (without `-` and with uppercase letters only) |
 | HMIP_PIN | The PIN of your Access Point (optional, only needed when a PIN was set during setup of your device) |
-| HMIP_CLIENT_ID | The client ID (will be generated when registering a new client) |
-| HMIP_CLIENT_NAME | The name of the client (will be set when registering a new client) |
-| HMIP_DEVICE_ID | The device ID (will be generated when registering a new client) |
-| HMIP_CLIENT_AUTH_TOKEN | The client auth token (will be generated when registering a new client) | |
-| HMIP_AUTH_TOKEN | The auth token (will be generated when registering a new client) |
+| HMIP_CLIENT_ID | The client ID (will be generated when [registering a new client](#registering-a-new-client)) | 
+| HMIP_CLIENT_NAME | The name of the client (will be set when [registering a new client](#registering-a-new-client)) |
+| HMIP_DEVICE_ID | The device ID (will be generated when [registering a new client](#registering-a-new-client)) |
+| HMIP_CLIENT_AUTH_TOKEN | The client auth token (will be generated when [registering a new client](#registering-a-new-client)) | |
+| HMIP_AUTH_TOKEN | The auth token (will be generated when [registering a new client](#registering-a-new-client)) |
 
 **You should not store any tokens or other secrets as plain text in the environment!**
 
