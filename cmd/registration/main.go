@@ -16,7 +16,11 @@ const (
 )
 
 func main() {
-	config := hmip.Config{}
+	config, err := hmip.GetConfig()
+	if err != nil {
+		fmt.Printf("\U0001F6AB %sFailed%s to create new client config: %v\n", ColorRedBold, ColorOff, err)
+		return
+	}
 
 	fmt.Printf("Registering new client in the Homematic IP Cloud\n")
 	fmt.Printf("\U0000251C Client Name: ")
@@ -26,10 +30,9 @@ func main() {
 	fmt.Printf("\U00002570 PIN: ")
 	config.PIN = commandLineInput()
 
-	err := config.RegisterClient(func() {
+	err = config.RegisterClient(func() {
 		fmt.Printf("\U0001F6CE Please press the %sblue button%s on the access point to confirm the client registration\n", ColorCyanBold, ColorOff)
 	})
-
 	if err != nil {
 		fmt.Printf("\U0001F6AB %sFailed%s to register new client %s%s%s: %v\n", ColorRedBold, ColorOff, ColorCyanBold, config.ClientName, ColorOff, err)
 		return

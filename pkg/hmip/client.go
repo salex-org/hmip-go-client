@@ -10,6 +10,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -17,6 +18,17 @@ import (
 const (
 	LookupEndpoint = "https://lookup.homematic.com:48335/getHost"
 	ApiVersion     = "12"
+	DeviceType     = "Computer"
+	Language       = "de-DE"
+	OSType         = "linux"
+
+	EnvVarNameAccessPointSGTIN = "HMIP_AP_SGTIN"
+	EnvVarNamePIN              = "HMIP_PIN"
+	EnvVarNameClientId         = "HMIP_CLIENT_ID"
+	EnvVarNameClientName       = "HMIP_CLIENT_NAME"
+	EnvVarNameDeviceId         = "HMIP_DEVICE_ID"
+	EnvVarNameClientAuthToken  = "HMIP_CLIENT_AUTH_TOKEN"
+	EnvVarNameAuthToken        = "HMIP_AUTH_TOKEN"
 )
 
 type HostsLookupRequest struct {
@@ -44,6 +56,10 @@ type ConfirmAuthTokenResponse struct {
 	ClientID string `json:"clientId"`
 }
 
+type GetStateRequest struct {
+	ClientCharacteristics ClientCharacteristics `json:"clientCharacteristics"`
+}
+
 type ClientCharacteristics struct {
 	APIVersion         string `json:"apiVersion"`
 	ClientName         string `json:"applicationIdentifier"`
@@ -56,16 +72,18 @@ type ClientCharacteristics struct {
 }
 
 type State struct {
+	Devices map[string]any `json:"devices"`
+	Clients map[string]any `json:"clients"`
 }
 
 type Client struct {
-	config *Config
+	config     *Config
+	httpClient *http.Client
 }
 
 type Config struct {
 	AccessPointSGTIN  string
 	ClientName        string
-	ClientVersion     string
 	RestEndpoint      string
 	WebSocketEndpoint string
 	LookupEndpoint    string
@@ -91,14 +109,29 @@ func (r *HomematicRoundTripper) RoundTrip(request *http.Request) (*http.Response
 
 func GetConfig() (*Config, error) {
 	config := Config{
-		LookupEndpoint: LookupEndpoint,
+		LookupEndpoint:   LookupEndpoint,
+		AccessPointSGTIN: os.Getenv(EnvVarNameAccessPointSGTIN),
+		PIN:              os.Getenv(EnvVarNamePIN),
+		ClientID:         os.Getenv(EnvVarNameClientId),
+		ClientName:       os.Getenv(EnvVarNameClientName),
+		ClientAuthToken:  os.Getenv(EnvVarNameClientAuthToken),
+		DeviceID:         os.Getenv(EnvVarNameDeviceId),
+		AuthToken:        os.Getenv(EnvVarNameAuthToken),
 	}
 	return &config, nil
 }
 
 func GetClientWithConfig(config *Config) (*Client, error) {
+	config.lookupEndpoints()
 	client := Client{
 		config: config,
+		httpClient: &http.Client{
+			Transport: &HomematicRoundTripper{
+				Origin: http.DefaultTransport,
+				config: config,
+			},
+			Timeout: 30 * time.Second,
+		},
 	}
 	return &client, nil
 }
@@ -143,7 +176,36 @@ func (c *Config) RegisterClient(handshakeCallback func()) error {
 }
 
 func (c *Client) LoadCurrentState() (*State, error) {
+	requestBody, _ := json.Marshal(GetStateRequest{
+		ClientCharacteristics: c.config.getClientCharacteristics(),
+	})
+	var response *http.Response
+	err := retry.Do(func() error {
+		request, err := http.NewRequest("POST", c.config.RestEndpoint+"/hmip/home/getCurrentState", bytes.NewReader(requestBody))
+		if err != nil {
+			return retry.Unrecoverable(err)
+		}
+		response, err = c.httpClient.Do(request)
+		if err != nil {
+			return err
+		}
+		if response.StatusCode != 200 {
+			return errors.New(fmt.Sprintf("Error on reading state (%s)", response.Status))
+		}
+		return nil
+	}, retry.OnRetry(func(_ uint, _ error) {
+		c.config.lookupEndpoints()
+	}), retry.Attempts(2))
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	responseBody, _ := io.ReadAll(response.Body)
 	state := State{}
+	err = json.Unmarshal(responseBody, &state)
+	if err != nil {
+		return nil, err
+	}
 	return &state, nil
 }
 
@@ -247,21 +309,22 @@ func (c *Config) confirmAuthToken(httpClient *http.Client) error {
 	return nil
 }
 
+func (c *Config) getClientCharacteristics() ClientCharacteristics {
+	return ClientCharacteristics{
+		APIVersion: ApiVersion,
+		ClientName: c.ClientName,
+		DeviceType: DeviceType,
+		Language:   Language,
+		OSType:     OSType,
+	}
+}
+
 func (c *Config) lookupEndpoints() error {
 	requestBody, _ := json.Marshal(HostsLookupRequest{
-		AccessPointSGTIN: c.AccessPointSGTIN,
-		ClientCharacteristics: ClientCharacteristics{
-			APIVersion:         ApiVersion,
-			ClientName:         c.ClientName,
-			ClientVersion:      c.ClientVersion,
-			DeviceManufacturer: "",
-			DeviceType:         "Computer",
-			Language:           "de-DE",
-			OSType:             "linux",
-			OSVersion:          "",
-		},
+		AccessPointSGTIN:      c.AccessPointSGTIN,
+		ClientCharacteristics: c.getClientCharacteristics(),
 	})
-	response, err := http.Post(LookupEndpoint, "application/json", bytes.NewReader(requestBody))
+	response, err := http.Post(c.LookupEndpoint, "application/json", bytes.NewReader(requestBody))
 	if err != nil {
 		return err
 	}
