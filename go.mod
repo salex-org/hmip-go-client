@@ -1,4 +1,4 @@
-module github.com/salex.org/hmip-go-client
+module github.com/salex-org/hmip-go-client
 
 go 1.19
 
