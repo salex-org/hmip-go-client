@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -21,7 +22,7 @@ const (
 	ApiVersion     = "12"
 	DeviceType     = "Computer"
 	Language       = "de-DE"
-	OSType         = "linux"
+	OSType         = runtime.GOOS
 
 	EnvVarNameAccessPointSGTIN = "HMIP_AP_SGTIN"
 	EnvVarNamePIN              = "HMIP_PIN"
