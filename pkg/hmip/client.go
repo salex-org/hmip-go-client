@@ -46,7 +46,7 @@ type RegisterClientRequest struct {
 	DeviceID         string `json:"deviceId"`
 	DeviceName       string `json:"deviceName,omitempty"`
 	AccessPointSGTIN string `json:"sgtin,omitempty"`
-	AuthToken        string `json:"authToken,omitempty""`
+	AuthToken        string `json:"authToken,omitempty"`
 }
 
 type GetAuthTokenResponse struct {
@@ -163,7 +163,7 @@ func GetConfig() (*Config, error) {
 }
 
 func GetClientWithConfig(config *Config) (*Client, error) {
-	config.lookupEndpoints()
+	_ = config.lookupEndpoints()
 	client := Client{
 		config: config,
 		httpClient: &http.Client{
@@ -235,12 +235,14 @@ func (c *Client) LoadCurrentState() (*State, error) {
 		}
 		return nil
 	}, retry.OnRetry(func(_ uint, _ error) {
-		c.config.lookupEndpoints()
+		_ = c.config.lookupEndpoints()
 	}), retry.Attempts(2))
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(response.Body)
 	responseBody, _ := io.ReadAll(response.Body)
 	state := State{}
 	err = json.Unmarshal(responseBody, &state)
@@ -251,8 +253,8 @@ func (c *Client) LoadCurrentState() (*State, error) {
 }
 
 func (c *Config) createClientAuthToken() {
-	digest := digest.SHA512.FromBytes([]byte(c.AccessPointSGTIN + "jiLpVitHvWnIGD1yo7MA"))
-	c.ClientAuthToken = strings.ToUpper(digest.Hex())
+	tokenDigest := digest.SHA512.FromBytes([]byte(c.AccessPointSGTIN + "jiLpVitHvWnIGD1yo7MA"))
+	c.ClientAuthToken = strings.ToUpper(tokenDigest.Hex())
 }
 
 func (c *Config) createDeviceID() {
@@ -315,7 +317,9 @@ func (c *Config) requestAuthToken(httpClient *http.Client) error {
 	if responseErr != nil {
 		return responseErr
 	}
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(response.Body)
 	responseBody, _ := io.ReadAll(response.Body)
 	result := GetAuthTokenResponse{}
 	responseErr = json.Unmarshal(responseBody, &result)
@@ -339,7 +343,9 @@ func (c *Config) confirmAuthToken(httpClient *http.Client) error {
 	if responseErr != nil {
 		return responseErr
 	}
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(response.Body)
 	responseBody, _ := io.ReadAll(response.Body)
 	result := ConfirmAuthTokenResponse{}
 	responseErr = json.Unmarshal(responseBody, &result)
@@ -372,10 +378,15 @@ func (c *Config) lookupEndpoints() error {
 	if response.StatusCode != 200 {
 		return errors.New(fmt.Sprintf("Error on endpoint lookup (%s)", response.Status))
 	}
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(response.Body)
 	responseBody, _ := io.ReadAll(response.Body)
 	result := HostsLookupResponse{}
-	json.Unmarshal(responseBody, &result)
+	err = json.Unmarshal(responseBody, &result)
+	if err != nil {
+		return err
+	}
 	c.RestEndpoint = result.RestEndpoint
 	c.WebSocketEndpoint = result.WebSocketEndpoint
 	return nil
