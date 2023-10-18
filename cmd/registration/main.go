@@ -26,7 +26,7 @@ func main() {
 	fmt.Printf("\U0000251C Client Name: ")
 	config.ClientName = commandLineInput()
 	fmt.Printf("\U0000251C Access Point SGTIN: ")
-	config.AccessPointSGTIN = strings.ReplaceAll(strings.ToUpper(commandLineInput()), "-", "")
+	config.AccessPointSGTIN = commandLineInput()
 	fmt.Printf("\U00002570 PIN: ")
 	config.PIN = commandLineInput()
 

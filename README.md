@@ -17,7 +17,7 @@ First set the following environment variables for the HmIP-Client to connect to 
 | Name | Description |
 |------|-------------|
 | | |
-| HMIP_AP_SGTIN | The SGTIN of your Access Point (without `-` and with uppercase letters only) |
+| HMIP_AP_SGTIN | The SGTIN of your Access Point |
 | HMIP_PIN | The PIN of your Access Point (optional, only needed when a PIN was set during setup of your device) |
 | HMIP_CLIENT_ID | The client ID (will be generated when [registering a new client](#registering-a-new-client)) | 
 | HMIP_CLIENT_NAME | The name of the client (will be set when [registering a new client](#registering-a-new-client)) |

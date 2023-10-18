@@ -253,7 +253,7 @@ func (c *Client) LoadCurrentState() (*State, error) {
 }
 
 func (c *Config) createClientAuthToken() {
-	tokenDigest := digest.SHA512.FromBytes([]byte(c.AccessPointSGTIN + "jiLpVitHvWnIGD1yo7MA"))
+	tokenDigest := digest.SHA512.FromBytes([]byte(trimSGTIN(c.AccessPointSGTIN) + "jiLpVitHvWnIGD1yo7MA"))
 	c.ClientAuthToken = strings.ToUpper(tokenDigest.Hex())
 }
 
@@ -265,7 +265,7 @@ func (c *Config) connectionRequest(httpClient *http.Client) error {
 	requestBody, _ := json.Marshal(RegisterClientRequest{
 		DeviceID:         c.DeviceID,
 		DeviceName:       c.ClientName,
-		AccessPointSGTIN: c.AccessPointSGTIN,
+		AccessPointSGTIN: trimSGTIN(c.AccessPointSGTIN),
 	})
 	request, requestErr := http.NewRequest("POST", c.RestEndpoint+"/hmip/auth/connectionRequest", bytes.NewReader(requestBody))
 	if requestErr != nil {
@@ -368,7 +368,7 @@ func (c *Config) getClientCharacteristics() ClientCharacteristics {
 
 func (c *Config) lookupEndpoints() error {
 	requestBody, _ := json.Marshal(HostsLookupRequest{
-		AccessPointSGTIN:      c.AccessPointSGTIN,
+		AccessPointSGTIN:      trimSGTIN(c.AccessPointSGTIN),
 		ClientCharacteristics: c.getClientCharacteristics(),
 	})
 	response, err := http.Post(c.LookupEndpoint, "application/json", bytes.NewReader(requestBody))
@@ -390,4 +390,8 @@ func (c *Config) lookupEndpoints() error {
 	c.RestEndpoint = result.RestEndpoint
 	c.WebSocketEndpoint = result.WebSocketEndpoint
 	return nil
+}
+
+func trimSGTIN(sgtin string) string {
+	return strings.ReplaceAll(strings.ToUpper(sgtin), "-", "")
 }
