@@ -111,10 +111,12 @@ func (c *clientImpl) LoadCurrentState() (*State, error) {
 	return &state, nil
 }
 
-type HomematicTimestamp time.Time
+type HomematicTimestamp struct {
+	time.Time
+}
 
 func (t *HomematicTimestamp) MarshalJSON() ([]byte, error) {
-	s := strconv.Itoa(int(time.Time(*t).Unix()))
+	s := strconv.Itoa(int(t.Time.UnixMilli()))
 	return []byte(s), nil
 }
 
@@ -123,7 +125,7 @@ func (t *HomematicTimestamp) UnmarshalJSON(value []byte) error {
 	if err != nil {
 		return err
 	}
-	*t = HomematicTimestamp(time.Unix(int64(unix), 0))
+	t.Time = time.UnixMilli(int64(unix))
 	return nil
 }
 
