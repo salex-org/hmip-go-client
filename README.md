@@ -1,12 +1,12 @@
 # GO Client for the Homematic IP Cloud
 A Golang wrapper for the REST API of the Homematic IP Cloud.
-Since there is no offical documentation i used the code of the [Python wrapper](https://github.com/coreGreenberet/homematicip-rest-api)
+Since there is no official documentation I used the code of the [Python wrapper](https://github.com/coreGreenberet/homematicip-rest-api)
 to get an idea of how the API works. Thanks to [coreGreenberet](https://github.com/coreGreenberet) for doing the great job of
 reverse engineering. **Use this library at your own risk!**
 
 # Installation
 
-Run the follwing command to install the library in your GO module:
+Run the following command to install the library in your GO module:
 
 ```shell
 go get github.com/salex-org/hmip-go-client
@@ -29,7 +29,7 @@ First set the following environment variables for the HmIP-Client to connect to 
 
 As an example, you can use [age](https://github.com/FiloSottile/age) for encryption and
 [sops](https://github.com/mozilla/sops) to edit the encrypted configuration.
-At runtime you can use [sops exec-env](https://github.com/mozilla/sops#passing-secrets-to-other-processes)
+At runtime, you can use [sops exec-env](https://github.com/mozilla/sops#passing-secrets-to-other-processes)
 to decrypt the configuration on the fly and pass it as environment variables only to your process.
 
 With the environment set you can run the following command to get the current state:
