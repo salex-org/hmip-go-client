@@ -1,5 +1,10 @@
 package hmip
 
+import (
+	"strconv"
+	"time"
+)
+
 type HostsLookupRequest struct {
 	AccessPointSGTIN      string                `json:"id"`
 	ClientCharacteristics ClientCharacteristics `json:"clientCharacteristics"`
@@ -12,9 +17,9 @@ type HostsLookupResponse struct {
 
 type RegisterClientRequest struct {
 	DeviceID         string `json:"deviceId"`
-	DeviceName       string `json:"deviceName,omitempty"`
-	AccessPointSGTIN string `json:"sgtin,omitempty"`
-	AuthToken        string `json:"authToken,omitempty"`
+	DeviceName       string `json:"deviceName"`
+	AccessPointSGTIN string `json:"sgtin"`
+	AuthToken        string `json:"authToken"`
 }
 
 type GetAuthTokenResponse struct {
@@ -56,10 +61,12 @@ type Device struct {
 }
 
 type FunctionalChannel struct {
-	Type         string  `json:"functionalChannelType"`
-	Temperature  float64 `json:"actualTemperature,omitempty"`
-	Humidity     int     `json:"humidity,omitempty"`
-	VapourAmount float64 `json:"vaporAmount,omitempty"`
+	Type                    string  `json:"functionalChannelType"`
+	Temperature             float64 `json:"actualTemperature"`
+	Humidity                int     `json:"humidity"`
+	VapourAmount            float64 `json:"vaporAmount"`
+	SwitchedOn              bool    `json:"on"`
+	CurrentPowerConsumption float64 `json:"currentPowerConsumption"`
 }
 
 type ClientRegistration struct {
@@ -67,4 +74,22 @@ type ClientRegistration struct {
 	Name     string             `json:"label"`
 	Created  HomematicTimestamp `json:"createdAtTimestamp"`
 	LastSeen HomematicTimestamp `json:"lastSeenAtTimestamp"`
+}
+
+type HomematicTimestamp struct {
+	time.Time
+}
+
+func (t *HomematicTimestamp) MarshalJSON() ([]byte, error) {
+	s := strconv.Itoa(int(t.Time.UnixMilli()))
+	return []byte(s), nil
+}
+
+func (t *HomematicTimestamp) UnmarshalJSON(value []byte) error {
+	unix, err := strconv.Atoi(string(value))
+	if err != nil {
+		return err
+	}
+	t.Time = time.UnixMilli(int64(unix))
+	return nil
 }

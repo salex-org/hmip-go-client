@@ -8,7 +8,6 @@ import (
 	"github.com/avast/retry-go/v4"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -109,24 +108,6 @@ func (c *clientImpl) LoadCurrentState() (*State, error) {
 		return nil, err
 	}
 	return &state, nil
-}
-
-type HomematicTimestamp struct {
-	time.Time
-}
-
-func (t *HomematicTimestamp) MarshalJSON() ([]byte, error) {
-	s := strconv.Itoa(int(t.Time.UnixMilli()))
-	return []byte(s), nil
-}
-
-func (t *HomematicTimestamp) UnmarshalJSON(value []byte) error {
-	unix, err := strconv.Atoi(string(value))
-	if err != nil {
-		return err
-	}
-	t.Time = time.UnixMilli(int64(unix))
-	return nil
 }
 
 type HomematicRoundTripper struct {
