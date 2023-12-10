@@ -226,13 +226,19 @@ func (e *Event) GetFunctionalChannels(deviceType, channelType string) []Function
 
 func (s State) GetFunctionalChannelsByType(deviceType, channelType string) []FunctionalChannel {
 	var channels []FunctionalChannel
-	for _, device := range s.Devices {
-		if device.Type == deviceType {
-			for _, channel := range device.Channels {
-				if channel.Type == channelType {
-					channels = append(channels, channel)
-				}
-			}
+	for _, device := range s.GetDevicesByType(deviceType) {
+		for _, channel := range device.GetFunctionalChannelsByType(channelType) {
+			channels = append(channels, channel)
+		}
+	}
+	return channels
+}
+
+func (d Device) GetFunctionalChannelsByType(channelType string) []FunctionalChannel {
+	var channels []FunctionalChannel
+	for _, channel := range d.Channels {
+		if channel.Type == channelType {
+			channels = append(channels, channel)
 		}
 	}
 	return channels
