@@ -224,6 +224,58 @@ func (e *Event) GetFunctionalChannels(deviceType, channelType string) []Function
 	return channels
 }
 
+func (s State) GetFunctionalChannelsByType(deviceType, channelType string) []FunctionalChannel {
+	var channels []FunctionalChannel
+	for _, device := range s.Devices {
+		if device.Type == deviceType {
+			for _, channel := range device.Channels {
+				if channel.Type == channelType {
+					channels = append(channels, channel)
+				}
+			}
+		}
+	}
+	return channels
+}
+
+func (s State) GetDevicesByType(deviceType string) []Device {
+	var devices []Device
+	for _, device := range s.Devices {
+		if device.Type == deviceType {
+			devices = append(devices, device)
+		}
+	}
+	return devices
+}
+
+func (s State) GetGroupsByType(groupType string) []Group {
+	var groups []Group
+	for _, group := range s.Groups {
+		if group.Type == groupType {
+			groups = append(groups, group)
+		}
+	}
+	return groups
+}
+
+func (s State) GetDeviceByID(deviceID string) *Device {
+	for _, device := range s.Devices {
+		if device.ID == deviceID {
+			return &device
+		}
+	}
+	return nil
+}
+
+func (s State) GetGroupByID(groupID string) *Group {
+	for _, group := range s.Groups {
+		if group.ID == groupID {
+			return &group
+		}
+	}
+	return nil
+}
+
 type HomematicRoundTripper struct {
 	Origin http.RoundTripper
 	config *Config
