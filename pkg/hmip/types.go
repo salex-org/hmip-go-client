@@ -5,6 +5,25 @@ import (
 	"time"
 )
 
+const (
+	EVENT_TYPE_DEVICE_CHANGED = "DEVICE_CHANGED"
+	EVENT_TYPE_GROUP_CHANGED  = "GROUP_CHANGED"
+	EVENT_TYPE_HOME_CHANGED   = "HOME_CHANGED"
+
+	CHANNEL_TYPE_SWITCH           = "SWITCH_CHANNEL"
+	CHANNEL_TYPE_SWITCH_MEASURING = "SWITCH_MEASURING_CHANNEL"
+	CHANNEL_TYPE_CLIMATE_SENSOR   = "CLIMATE_SENSOR_CHANNEL"
+
+	DEVICE_TYPE_TEMPERATURE_HUMIDITY_SENSOR_OUTDOOR = "TEMPERATURE_HUMIDITY_SENSOR_OUTDOOR"
+	DEVICE_TYPE_PLUGABLE_SWITCH                     = "PLUGABLE_SWITCH"
+	DEVICE_TYPE_PLUGABLE_SWITCH_MEASURING           = "PLUGABLE_SWITCH_MEASURING"
+
+	GROUP_TYPE_META        = "META"
+	GROUP_TYPE_ENVIRONMENT = "ENVIRONMENT"
+
+	ORIGIN_TYPE_DEVICE = "DEVICE"
+)
+
 type HostsLookupRequest struct {
 	AccessPointSGTIN      string                `json:"id"`
 	ClientCharacteristics ClientCharacteristics `json:"clientCharacteristics"`
@@ -47,7 +66,14 @@ type ClientCharacteristics struct {
 
 type State struct {
 	Devices map[string]Device             `json:"devices"`
+	Groups  map[string]Group              `json:"groups"`
 	Clients map[string]ClientRegistration `json:"clients"`
+}
+
+type Group struct {
+	ID   string `json:"id"`
+	Name string `json:"label"`
+	Type string `json:"type"`
 }
 
 type Device struct {
@@ -75,6 +101,29 @@ type ClientRegistration struct {
 	Created  HomematicTimestamp `json:"createdAtTimestamp"`
 	LastSeen HomematicTimestamp `json:"lastSeenAtTimestamp"`
 }
+
+type PushMessage struct {
+	Events map[string]Event `json:"events"`
+	Origin Origin           `json:"origin"`
+}
+
+type Origin struct {
+	Type string `json:"originType"`
+	ID   string `json:"id"`
+}
+
+type Event struct {
+	Type   string  `json:"pushEventType"`
+	Device *Device `json:"device,omitempty"`
+	Group  *Group  `json:"group,omitempty"`
+}
+
+type HandlerRegistration struct {
+	Handler EventHandler
+	Types   []string
+}
+
+type EventHandler func(event Event, origin Origin)
 
 type HomematicTimestamp struct {
 	time.Time
