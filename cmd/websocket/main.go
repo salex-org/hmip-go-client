@@ -12,10 +12,6 @@ import (
 	"time"
 )
 
-// TODO: Observer first runs getStatus once and then updates only on events :-)
-
-// TODO: Graceful shutdown in observer !!!
-
 const (
 	ColorRedBold = "\033[1;31m"
 	ColorOff     = "\033[0m"

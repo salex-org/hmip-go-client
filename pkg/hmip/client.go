@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"time"
 )
@@ -17,6 +18,7 @@ import (
 type Client interface {
 	LoadCurrentState() (*State, error)
 	RegisterEventHandler(handler EventHandler, eventTypes ...string)
+	SetEventLog(writer io.Writer)
 	ListenForEvents() error
 	StopEventListening() error
 }
@@ -26,6 +28,7 @@ type clientImpl struct {
 	httpClient          *http.Client
 	registrations       []HandlerRegistration
 	eventLoopRunning    bool
+	eventLog            io.Writer
 	websocketConfig     *websocket.Config
 	websocketConnection *websocket.Conn
 }
@@ -51,6 +54,7 @@ func GetClientWithConfig(config *Config) (Client, error) {
 			Timeout: 30 * time.Second,
 		},
 		eventLoopRunning: false,
+		eventLog:         os.Stdout,
 	}
 	if err == nil {
 		// Initialize websocket configuration
@@ -136,27 +140,31 @@ func (c *clientImpl) RegisterEventHandler(handler EventHandler, eventTypes ...st
 	})
 }
 
+func (c *clientImpl) SetEventLog(writer io.Writer) {
+	c.eventLog = writer
+}
+
 func (c *clientImpl) ListenForEvents() error {
 	if c.eventLoopRunning {
 		return errors.New("Event loop already running")
 	}
 	c.eventLoopRunning = true
 	return retry.Do(c.eventLoop, retry.DelayType(func(n uint, loopErr error, config *retry.Config) time.Duration {
-		fmt.Printf("Error in event loop: %v\nTry to lookup hosts again\n", loopErr)
+		_, _ = fmt.Fprintf(c.eventLog, "Error in event loop: %v\nTry to lookup hosts again\n", loopErr)
 		err := c.config.lookupEndpoints()
 		if err == nil {
 			if c.websocketConfig.Location.String() != c.config.WebSocketEndpoint {
 				c.websocketConfig.Location, err = url.ParseRequestURI(c.config.WebSocketEndpoint)
 				if err == nil {
-					fmt.Printf("Switching websocket endpoint to %s\nRestarting event loop\n", c.config.WebSocketEndpoint)
+					_, _ = fmt.Fprintf(c.eventLog, "Switching websocket endpoint to %s\nRestarting event loop\n", c.config.WebSocketEndpoint)
 					return 0
 				}
 			}
 		}
 		if err != nil {
-			fmt.Printf("Error during host lookup: %v\n", err)
+			_, _ = fmt.Fprintf(c.eventLog, "Error during host lookup: %v\n", err)
 		}
-		fmt.Printf("Restarting event loop in 10 minutes\n")
+		_, _ = fmt.Fprintf(c.eventLog, "Restarting event loop in 10 minutes\n")
 		return time.Minute * 10
 	}), retry.Attempts(0))
 }
@@ -168,10 +176,10 @@ func (c *clientImpl) eventLoop() error {
 		return err
 	}
 	defer func(conn *websocket.Conn) {
-		fmt.Printf("\U0001F6AB Closing connection to %s\n", conn.RemoteAddr().String())
+		_, _ = fmt.Fprintf(c.eventLog, "\U0001F6AB Closing connection to %s\n", conn.RemoteAddr().String())
 		_ = conn.Close()
 	}(c.websocketConnection)
-	fmt.Printf("\U0001F50C Established connection to %v\n", c.websocketConnection.RemoteAddr())
+	_, _ = fmt.Fprintf(c.eventLog, "\U0001F50C Established connection to %v\n", c.websocketConnection.RemoteAddr())
 	for {
 		message := PushMessage{}
 		err := websocket.JSON.Receive(c.websocketConnection, &message)
