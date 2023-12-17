@@ -21,6 +21,7 @@ type Client interface {
 	SetEventLog(writer io.Writer)
 	ListenForEvents() error
 	StopEventListening() error
+	GetEventLoopState() error
 }
 
 type clientImpl struct {
@@ -28,6 +29,7 @@ type clientImpl struct {
 	httpClient          *http.Client
 	registrations       []HandlerRegistration
 	eventLoopRunning    bool
+	eventLoopError      error
 	eventLog            io.Writer
 	websocketConfig     *websocket.Config
 	websocketConnection *websocket.Conn
@@ -150,6 +152,7 @@ func (c *clientImpl) ListenForEvents() error {
 	}
 	c.eventLoopRunning = true
 	return retry.Do(c.eventLoop, retry.DelayType(func(n uint, loopErr error, config *retry.Config) time.Duration {
+		c.eventLoopError = loopErr
 		_, _ = fmt.Fprintf(c.eventLog, "Error in event loop: %v\nTry to lookup hosts again\n", loopErr)
 		err := c.config.lookupEndpoints()
 		if err == nil {
@@ -162,6 +165,7 @@ func (c *clientImpl) ListenForEvents() error {
 			}
 		}
 		if err != nil {
+			c.eventLoopError = err
 			_, _ = fmt.Fprintf(c.eventLog, "Error during host lookup: %v\n", err)
 		}
 		_, _ = fmt.Fprintf(c.eventLog, "Restarting event loop in 10 minutes\n")
@@ -170,6 +174,7 @@ func (c *clientImpl) ListenForEvents() error {
 }
 
 func (c *clientImpl) eventLoop() error {
+	c.eventLoopError = nil // Reset error cache
 	var err error
 	c.websocketConnection, err = websocket.DialConfig(c.websocketConfig)
 	if err != nil {
@@ -198,6 +203,10 @@ func (c *clientImpl) eventLoop() error {
 			}
 		}
 	}
+}
+
+func (c *clientImpl) GetEventLoopState() error {
+	return c.eventLoopError
 }
 
 func (c *clientImpl) StopEventListening() error {
