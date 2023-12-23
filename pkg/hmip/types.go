@@ -97,18 +97,19 @@ type Device struct {
 }
 
 type FunctionalChannel struct {
-	Type                    string  `json:"functionalChannelType"`
-	Temperature             float64 `json:"actualTemperature"`
-	Humidity                int     `json:"humidity"`
-	VapourAmount            float64 `json:"vaporAmount"`
-	SwitchedOn              bool    `json:"on"`
-	CurrentPowerConsumption float64 `json:"currentPowerConsumption"`
-	LowBattery              bool    `json:"lowBat"`
-	RSSIValue               int     `json:"rssiDeviceValue"`
-	Unreached               bool    `json:"unreach"`
-	Undervoltage            bool    `json:"deviceUndervoltage"`
-	Overheated              bool    `json:"deviceOverheated"`
-	ChamberDegraded         bool    `json:"chamberDegraded"`
+	Type                    string   `json:"functionalChannelType"`
+	Temperature             float64  `json:"actualTemperature"`
+	Humidity                int      `json:"humidity"`
+	VapourAmount            float64  `json:"vaporAmount"`
+	SwitchedOn              bool     `json:"on"`
+	CurrentPowerConsumption float64  `json:"currentPowerConsumption"`
+	LowBattery              bool     `json:"lowBat"`
+	RSSIValue               int      `json:"rssiDeviceValue"`
+	Unreached               bool     `json:"unreach"`
+	Undervoltage            bool     `json:"deviceUndervoltage"`
+	Overheated              bool     `json:"deviceOverheated"`
+	ChamberDegraded         bool     `json:"chamberDegraded"`
+	Groups                  []string `json:"groups"`
 }
 
 type ClientRegistration struct {
