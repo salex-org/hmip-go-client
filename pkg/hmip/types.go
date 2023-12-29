@@ -1,7 +1,7 @@
 package hmip
 
 import (
-	"strconv"
+	"io"
 	"time"
 )
 
@@ -32,130 +32,165 @@ const (
 	ORIGIN_TYPE_DEVICE = "DEVICE"
 )
 
-type HostsLookupRequest struct {
-	AccessPointSGTIN      string                `json:"id"`
-	ClientCharacteristics ClientCharacteristics `json:"clientCharacteristics"`
+// ======================================================
+
+// Homematic is the base interface to access the HomemticIP Cloud
+type Homematic interface {
+	LoadCurrentState() (State, error)
+	RegisterEventHandler(handler EventHandler, eventTypes ...string)
+	SetEventLog(writer io.Writer)
+	ListenForEvents() error
+	StopEventListening() error
+	GetEventLoopState() error
 }
 
-type HostsLookupResponse struct {
-	RestEndpoint      string `json:"urlREST"`
-	WebSocketEndpoint string `json:"urlWebSocket"`
+// ======================================================
+
+// State represents the current state of the HomematicIP Cloud
+// with all devices, groups and clients
+type State interface {
+	GetDevices() Devices
+	GetGroups() Groups
+	GetClients() Clients
+	GetDevicesByType(deviceType string) Devices
+	GetGroupsByType(groupType string) Groups
+	GetDeviceByID(deviceID string) Device
+	GetGroupByID(groupID string) Group
+	GetFunctionalChannelsByType(deviceType, channelType string) FunctionalChannels
 }
 
-type RegisterClientRequest struct {
-	DeviceID         string `json:"deviceId"`
-	DeviceName       string `json:"deviceName"`
-	AccessPointSGTIN string `json:"sgtin"`
-	AuthToken        string `json:"authToken"`
+// ======================================================
+
+type Device interface {
+	Stateful
+	Named
+	Typed
+	GetModel() string
+	GetSGTIN() string
+	IsPermanentlyReachable() bool
+	GetConnectionType() string
+	GetFunctionalChannels() FunctionalChannels
+	GetFunctionalChannelsByType(channelType string) FunctionalChannels
+}
+type Devices []Device
+
+// ======================================================
+
+type Group interface {
+	Stateful
+	Named
+	Typed
+}
+type Groups []Group
+
+type MetaGroup interface {
+	Group
+	GetIcon() string
 }
 
-type GetAuthTokenResponse struct {
-	AuthToken string `json:"authToken"`
+// ======================================================
+
+type Client interface {
+	Typed
+	Named
+	GetID() string
+	GetLastSeen() time.Time
+	GetCreated() time.Time
+}
+type Clients []Client
+
+// ======================================================
+
+type FunctionalChannel interface {
+	Typed
+}
+type FunctionalChannels []FunctionalChannel
+
+type BaseDeviceChannel interface {
+	FunctionalChannel
+	HasLowBattery() bool
+	GetRSSIValue() int
+	IsUnreached() bool
+	HasUnderVoltage() bool
+	IsOverheated() bool
+	GetGroups() []string
 }
 
-type ConfirmAuthTokenResponse struct {
-	ClientID string `json:"clientId"`
+type SwitchChannel interface {
+	FunctionalChannel
+	Switchable
 }
 
-type GetStateRequest struct {
-	ClientCharacteristics ClientCharacteristics `json:"clientCharacteristics"`
+type SwitchMeasuringChannel interface {
+	FunctionalChannel
+	Switchable
+	PowerConsumptionMeasuring
 }
 
-type ClientCharacteristics struct {
-	APIVersion         string `json:"apiVersion"`
-	ClientName         string `json:"applicationIdentifier"`
-	ClientVersion      string `json:"applicationVersion"`
-	DeviceManufacturer string `json:"deviceManufacturer"`
-	DeviceType         string `json:"deviceType"`
-	Language           string `json:"language"`
-	OSType             string `json:"osType"`
-	OSVersion          string `json:"osVersion"`
+type ClimateSensorChannel interface {
+	FunctionalChannel
+	ClimateMeasuring
 }
 
-type State struct {
-	Devices map[string]Device             `json:"devices"`
-	Groups  map[string]Group              `json:"groups"`
-	Clients map[string]ClientRegistration `json:"clients"`
+type SmokeDetectorChannel interface {
+	FunctionalChannel
+	IsChamberDegraded() bool
 }
 
-type Group struct {
-	ID   string `json:"id"`
-	Name string `json:"label"`
-	Type string `json:"type"`
+// ======================================================
+
+type Stateful interface {
+	GetID() string
+	GetLastUpdated() time.Time
 }
 
-type Device struct {
-	ID                   string                       `json:"id"`
-	Name                 string                       `json:"label"`
-	Type                 string                       `json:"type"`
-	Model                string                       `json:"modelType"`
-	SGTIN                string                       `json:"serializedGlobalTradeItemNumber"`
-	Channels             map[string]FunctionalChannel `json:"functionalChannels"`
-	LastStatusUpdate     HomematicTimestamp           `json:"lastStatusUpdate"`
-	PermanentlyReachable bool                         `json:"permanentlyReachable"`
-	ConnectionType       string                       `json:"connectionType"`
+type Named interface {
+	GetName() string
 }
 
-type FunctionalChannel struct {
-	Type                    string   `json:"functionalChannelType"`
-	Temperature             float64  `json:"actualTemperature"`
-	Humidity                int      `json:"humidity"`
-	VapourAmount            float64  `json:"vaporAmount"`
-	SwitchedOn              bool     `json:"on"`
-	CurrentPowerConsumption float64  `json:"currentPowerConsumption"`
-	LowBattery              bool     `json:"lowBat"`
-	RSSIValue               int      `json:"rssiDeviceValue"`
-	Unreached               bool     `json:"unreach"`
-	Undervoltage            bool     `json:"deviceUndervoltage"`
-	Overheated              bool     `json:"deviceOverheated"`
-	ChamberDegraded         bool     `json:"chamberDegraded"`
-	Groups                  []string `json:"groups"`
+type Typed interface {
+	GetType() string
 }
 
-type ClientRegistration struct {
-	ID       string             `json:"id"`
-	Name     string             `json:"label"`
-	Created  HomematicTimestamp `json:"createdAtTimestamp"`
-	LastSeen HomematicTimestamp `json:"lastSeenAtTimestamp"`
+type Switchable interface {
+	IsSwitchedOn() bool
 }
 
-type PushMessage struct {
-	Events map[string]Event `json:"events"`
-	Origin Origin           `json:"origin"`
+type PowerConsumptionMeasuring interface {
+	GetCurrentPowerConsumption() float64
 }
 
-type Origin struct {
-	Type string `json:"originType"`
-	ID   string `json:"id"`
+type ClimateMeasuring interface {
+	GetActualTemperature() float64
+	GetHumidity() int
+	GetVapourAmount() float64
 }
 
-type Event struct {
-	Type   string  `json:"pushEventType"`
-	Device *Device `json:"device,omitempty"`
-	Group  *Group  `json:"group,omitempty"`
+// ======================================================
+
+type Event interface {
+	Typed
+}
+
+type Events []Event
+
+type DeviceChangedEvent interface {
+	Event
+	GetDevice() Device
+	GetFunctionalChannels(deviceType, channelType string) FunctionalChannels
+}
+type GroupChangedEvent interface {
+	Event
+	GetGroup() Group
+}
+
+type Origin interface {
+	Typed
+	GetID() string
 }
 
 type HandlerRegistration struct {
 	Handler EventHandler
 	Types   []string
 }
-
 type EventHandler func(event Event, origin Origin)
-
-type HomematicTimestamp struct {
-	time.Time
-}
-
-func (t *HomematicTimestamp) MarshalJSON() ([]byte, error) {
-	s := strconv.Itoa(int(t.Time.UnixMilli()))
-	return []byte(s), nil
-}
-
-func (t *HomematicTimestamp) UnmarshalJSON(value []byte) error {
-	unix, err := strconv.Atoi(string(value))
-	if err != nil {
-		return err
-	}
-	t.Time = time.UnixMilli(int64(unix))
-	return nil
-}

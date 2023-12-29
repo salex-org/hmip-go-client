@@ -17,7 +17,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("\U0001F6AB %sFailed%s to create client: %v\n", ColorRedBold, ColorOff, err)
 	}
-	var state *hmip.State
+	var state hmip.State
 	state, err = client.LoadCurrentState()
 	if err != nil {
 		log.Fatalf("\U0001F6AB %sFailed%s to load state: %v\n", ColorRedBold, ColorOff, err)
