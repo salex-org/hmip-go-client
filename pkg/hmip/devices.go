@@ -1,5 +1,7 @@
 package hmip
 
+import "encoding/json"
+
 type device struct {
 	stateful
 	named
@@ -43,4 +45,25 @@ func (d device) GetFunctionalChannelsByType(channelType string) FunctionalChanne
 		}
 	}
 	return channels
+}
+
+// ======================================================
+
+func (d *Devices) UnmarshalJSON(value []byte) error {
+	var deviceValues map[string]json.RawMessage
+	err := json.Unmarshal(value, &deviceValues)
+	if err != nil {
+		return err
+	}
+	devices := make(Devices, 0, len(deviceValues))
+	for _, deviceValue := range deviceValues {
+		var device device
+		err = json.Unmarshal(deviceValue, &device)
+		if err != nil {
+			return err
+		}
+		devices = append(devices, &device)
+	}
+	*d = devices
+	return nil
 }
