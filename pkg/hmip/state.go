@@ -1,17 +1,13 @@
 package hmip
 
 type state struct {
-	Devices map[string]device `json:"devices"`
-	Groups  Groups            `json:"groups"`
-	Clients map[string]client `json:"clients"`
+	Devices Devices `json:"devices"`
+	Groups  Groups  `json:"groups"`
+	Clients Clients `json:"clients"`
 }
 
 func (s state) GetDevices() Devices {
-	var devices Devices
-	for _, device := range s.Devices {
-		devices = append(devices, device)
-	}
-	return devices
+	return s.Devices
 }
 
 func (s state) GetGroups() Groups {
@@ -19,17 +15,13 @@ func (s state) GetGroups() Groups {
 }
 
 func (s state) GetClients() Clients {
-	var clients Clients
-	for _, client := range s.Clients {
-		clients = append(clients, client)
-	}
-	return clients
+	return s.Clients
 }
 
 func (s state) GetDevicesByType(deviceType string) Devices {
 	var devices Devices
 	for _, device := range s.Devices {
-		if device.Type == deviceType {
+		if device.GetType() == deviceType {
 			devices = append(devices, device)
 		}
 	}
@@ -48,7 +40,7 @@ func (s state) GetGroupsByType(groupType string) Groups {
 
 func (s state) GetDeviceByID(deviceID string) Device {
 	for _, device := range s.Devices {
-		if device.ID == deviceID {
+		if device.GetID() == deviceID {
 			return device
 		}
 	}
