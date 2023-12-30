@@ -18,7 +18,7 @@ import (
 type homematic struct {
 	config              *Config
 	httpClient          *http.Client
-	registrations       []HandlerRegistration
+	registrations       []handlerRegistration
 	eventLoopRunning    bool
 	eventLoopError      error
 	eventLog            io.Writer
@@ -97,7 +97,7 @@ func (c *homematic) LoadCurrentState() (State, error) {
 }
 
 func (c *homematic) RegisterEventHandler(handler EventHandler, eventTypes ...string) {
-	c.registrations = append(c.registrations, HandlerRegistration{
+	c.registrations = append(c.registrations, handlerRegistration{
 		Handler: handler,
 		Types:   eventTypes,
 	})
@@ -200,4 +200,9 @@ type getStateRequest struct {
 type pushMessage struct {
 	Events Events `json:"events"`
 	Origin origin `json:"origin"`
+}
+
+type handlerRegistration struct {
+	Handler EventHandler
+	Types   []string
 }
