@@ -1,7 +1,7 @@
 package hmip
 
 import (
-	"strconv"
+	"io"
 	"time"
 )
 
@@ -32,130 +32,199 @@ const (
 	ORIGIN_TYPE_DEVICE = "DEVICE"
 )
 
-type HostsLookupRequest struct {
-	AccessPointSGTIN      string                `json:"id"`
-	ClientCharacteristics ClientCharacteristics `json:"clientCharacteristics"`
+// ======================================================
+
+// Homematic is the base interface to access the HomemticIP Cloud.
+type Homematic interface {
+	LoadCurrentState() (State, error)
+	RegisterEventHandler(handler EventHandler, eventTypes ...string)
+	SetEventLog(writer io.Writer)
+	ListenForEvents() error
+	StopEventListening() error
+	GetEventLoopState() error
 }
 
-type HostsLookupResponse struct {
-	RestEndpoint      string `json:"urlREST"`
-	WebSocketEndpoint string `json:"urlWebSocket"`
+// ======================================================
+
+// State represents the current state of the HomematicIP Cloud
+// with all devices, groups and clients.
+type State interface {
+	GetDevices() Devices
+	GetGroups() Groups
+	GetClients() Clients
+	GetDevicesByType(deviceType string) Devices
+	GetGroupsByType(groupType string) Groups
+	GetDeviceByID(deviceID string) Device
+	GetGroupByID(groupID string) Group
+	GetFunctionalChannelsByType(deviceType, channelType string) FunctionalChannels
 }
 
-type RegisterClientRequest struct {
-	DeviceID         string `json:"deviceId"`
-	DeviceName       string `json:"deviceName"`
-	AccessPointSGTIN string `json:"sgtin"`
-	AuthToken        string `json:"authToken"`
+// ======================================================
+
+// Device represents the current state of a device.
+// Specific information is stored in the functional channels.
+type Device interface {
+	Stateful
+	Named
+	Typed
+	GetModel() string
+	GetSGTIN() string
+	IsPermanentlyReachable() bool
+	GetConnectionType() string
+	GetFunctionalChannels() FunctionalChannels
+	GetFunctionalChannelsByType(channelType string) FunctionalChannels
+}
+type Devices []Device
+
+// ======================================================
+
+// Group represents the current state of a group.
+type Group interface {
+	Stateful
+	Named
+	Typed
+}
+type Groups []Group
+
+// MetaGroup represents the current state of a group with GROUP_TYPE_META.
+type MetaGroup interface {
+	Group
+	GetIcon() string
 }
 
-type GetAuthTokenResponse struct {
-	AuthToken string `json:"authToken"`
+// ======================================================
+
+// Client represents a registered client.
+type Client interface {
+	Typed
+	Named
+	GetID() string
+	GetLastSeen() time.Time
+	GetCreated() time.Time
+}
+type Clients []Client
+
+// ======================================================
+
+// FunctionalChannel represents a functional channel as
+// part of a device. It is extended in special sub interfaces.
+type FunctionalChannel interface {
+	Typed
+}
+type FunctionalChannels []FunctionalChannel
+
+// BaseDeviceChannel is a special functional channel for type CHANNEL_TYPE_DEVICE_BASE
+// containing base device information available in all kinds of devices.
+type BaseDeviceChannel interface {
+	FunctionalChannel
+	HasLowBattery() bool
+	GetRSSIValue() int
+	IsUnreached() bool
+	HasUnderVoltage() bool
+	IsOverheated() bool
+	GetGroups() []string
 }
 
-type ConfirmAuthTokenResponse struct {
-	ClientID string `json:"clientId"`
+// SwitchChannel is a special functional channel for type CHANNEL_TYPE_SWITCH
+// containing the switch state of switching devices.
+type SwitchChannel interface {
+	FunctionalChannel
+	Switchable
 }
 
-type GetStateRequest struct {
-	ClientCharacteristics ClientCharacteristics `json:"clientCharacteristics"`
+// SwitchMeasuringChannel is a special functional channel for type CHANNEL_TYPE_SWITCH_MEASURING
+// containing the switch state and the current power consumption of switching and measuring devices.
+type SwitchMeasuringChannel interface {
+	FunctionalChannel
+	Switchable
+	PowerConsumptionMeasuring
 }
 
-type ClientCharacteristics struct {
-	APIVersion         string `json:"apiVersion"`
-	ClientName         string `json:"applicationIdentifier"`
-	ClientVersion      string `json:"applicationVersion"`
-	DeviceManufacturer string `json:"deviceManufacturer"`
-	DeviceType         string `json:"deviceType"`
-	Language           string `json:"language"`
-	OSType             string `json:"osType"`
-	OSVersion          string `json:"osVersion"`
+// ClimateSensorChannel is a special functional channel for type CHANNEL_TYPE_CLIMATE_SENSOR
+// containing the measuring data of climate measuring devices.
+type ClimateSensorChannel interface {
+	FunctionalChannel
+	ClimateMeasuring
 }
 
-type State struct {
-	Devices map[string]Device             `json:"devices"`
-	Groups  map[string]Group              `json:"groups"`
-	Clients map[string]ClientRegistration `json:"clients"`
+// SmokeDetectorChannel is a special functional channel for type CHANNEL_TYPE_SMOKE_DETECTOR
+// containing information regarding the chamber state of smoke detecting devices.
+type SmokeDetectorChannel interface {
+	FunctionalChannel
+	IsChamberDegraded() bool
 }
 
-type Group struct {
-	ID   string `json:"id"`
-	Name string `json:"label"`
-	Type string `json:"type"`
+// ======================================================
+
+// Stateful is a capability implemented by all interfaces representing data
+// which has a status that gets updated periodically.
+type Stateful interface {
+	GetID() string
+	GetLastUpdated() time.Time
 }
 
-type Device struct {
-	ID                   string                       `json:"id"`
-	Name                 string                       `json:"label"`
-	Type                 string                       `json:"type"`
-	Model                string                       `json:"modelType"`
-	SGTIN                string                       `json:"serializedGlobalTradeItemNumber"`
-	Channels             map[string]FunctionalChannel `json:"functionalChannels"`
-	LastStatusUpdate     HomematicTimestamp           `json:"lastStatusUpdate"`
-	PermanentlyReachable bool                         `json:"permanentlyReachable"`
-	ConnectionType       string                       `json:"connectionType"`
+// Named is a capability implemented by all interfaces representing data
+// which has a name.
+type Named interface {
+	GetName() string
 }
 
-type FunctionalChannel struct {
-	Type                    string   `json:"functionalChannelType"`
-	Temperature             float64  `json:"actualTemperature"`
-	Humidity                int      `json:"humidity"`
-	VapourAmount            float64  `json:"vaporAmount"`
-	SwitchedOn              bool     `json:"on"`
-	CurrentPowerConsumption float64  `json:"currentPowerConsumption"`
-	LowBattery              bool     `json:"lowBat"`
-	RSSIValue               int      `json:"rssiDeviceValue"`
-	Unreached               bool     `json:"unreach"`
-	Undervoltage            bool     `json:"deviceUndervoltage"`
-	Overheated              bool     `json:"deviceOverheated"`
-	ChamberDegraded         bool     `json:"chamberDegraded"`
-	Groups                  []string `json:"groups"`
+// Typed is a capability implemented by all interfaces representing data
+// which has a type.
+type Typed interface {
+	GetType() string
 }
 
-type ClientRegistration struct {
-	ID       string             `json:"id"`
-	Name     string             `json:"label"`
-	Created  HomematicTimestamp `json:"createdAtTimestamp"`
-	LastSeen HomematicTimestamp `json:"lastSeenAtTimestamp"`
+// Switchable is a capability implemented by all interfaces representing data
+// which contains a switch status.
+type Switchable interface {
+	IsSwitchedOn() bool
 }
 
-type PushMessage struct {
-	Events map[string]Event `json:"events"`
-	Origin Origin           `json:"origin"`
+// PowerConsumptionMeasuring is a capability implemented by all interfaces
+// representing data which contains a current power consumption.
+type PowerConsumptionMeasuring interface {
+	GetCurrentPowerConsumption() float64
 }
 
-type Origin struct {
-	Type string `json:"originType"`
-	ID   string `json:"id"`
+// ClimateMeasuring is a capability implemented by all interfaces representing data
+// which contains climate measuring information.
+type ClimateMeasuring interface {
+	GetActualTemperature() float64
+	GetHumidity() int
+	GetVapourAmount() float64
 }
 
-type Event struct {
-	Type   string  `json:"pushEventType"`
-	Device *Device `json:"device,omitempty"`
-	Group  *Group  `json:"group,omitempty"`
+// ======================================================
+
+// Event represents an event received by a WebSocket connection.
+// It is extended in special sub interfaces.
+type Event interface {
+	Typed
+}
+type Events []Event
+
+// DeviceChangedEvent is a special functional channel for type EVENT_TYPE_DEVICE_CHANGED
+// containing the updated status of a Device.
+type DeviceChangedEvent interface {
+	Event
+	GetDevice() Device
+	GetFunctionalChannels(deviceType, channelType string) FunctionalChannels
 }
 
-type HandlerRegistration struct {
-	Handler EventHandler
-	Types   []string
+// GroupChangedEvent is a special functional channel for type EVENT_TYPE_GROUP_CHANGED
+// containing the updated status of a Group.
+type GroupChangedEvent interface {
+	Event
+	GetGroup() Group
 }
 
+// Origin represents the origin of an event received by a WebSocket connection.
+type Origin interface {
+	Typed
+	GetID() string
+}
+
+// EventHandler represents and function type used to register a WebSocket event
+// handler (see Homematic.RegisterEventHandler)
 type EventHandler func(event Event, origin Origin)
-
-type HomematicTimestamp struct {
-	time.Time
-}
-
-func (t *HomematicTimestamp) MarshalJSON() ([]byte, error) {
-	s := strconv.Itoa(int(t.Time.UnixMilli()))
-	return []byte(s), nil
-}
-
-func (t *HomematicTimestamp) UnmarshalJSON(value []byte) error {
-	unix, err := strconv.Atoi(string(value))
-	if err != nil {
-		return err
-	}
-	t.Time = time.UnixMilli(int64(unix))
-	return nil
-}

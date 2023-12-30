@@ -33,9 +33,7 @@ func main() {
 	// Loop function for receiving events from HmIP
 	wait.Add(1)
 	client.RegisterEventHandler(LoggingGenericEventHandler)
-	client.RegisterEventHandler(LoggingCLimateSensordHandler, hmip.EVENT_TYPE_DEVICE_CHANGED)
-	client.RegisterEventHandler(LoggingPluggableSwitchActiveHandler, hmip.EVENT_TYPE_DEVICE_CHANGED)
-	client.RegisterEventHandler(LoggingPluggableSwitchMeasuringHandler, hmip.EVENT_TYPE_DEVICE_CHANGED)
+
 	go func() {
 		defer wait.Done()
 		_ = client.ListenForEvents()
@@ -57,35 +55,30 @@ func main() {
 }
 
 func LoggingGenericEventHandler(event hmip.Event, origin hmip.Origin) {
-	fmt.Printf("\U000023F0 %s - \U0001F4AC: Event of type %s", time.Now(), event.Type)
-	if event.Device != nil {
-		fmt.Printf(" for device %s (type %s)", event.Device.Name, event.Device.Type)
-	}
-	if event.Group != nil {
-		fmt.Printf(" for group %s (type %s)", event.Group.Name, event.Group.Type)
-	}
-	fmt.Printf(" from origin %s (type %s)\n", origin.ID, origin.Type)
-}
-
-func LoggingCLimateSensordHandler(event hmip.Event, _ hmip.Origin) {
-	for _, channel := range event.GetFunctionalChannels(hmip.DEVICE_TYPE_TEMPERATURE_HUMIDITY_SENSOR_OUTDOOR, hmip.CHANNEL_TYPE_CLIMATE_SENSOR) {
-		fmt.Printf("\U000023F0 %s - \U0001F4AC %s: \U0001F321 %.1f°C, \U0001F4A7 %d%%, \U0001F328 %.2f\n",
-			event.Device.LastStatusUpdate.Time,
-			event.Device.Name,
-			channel.Temperature,
-			channel.Humidity,
-			channel.VapourAmount)
-	}
-}
-
-func LoggingPluggableSwitchActiveHandler(event hmip.Event, _ hmip.Origin) {
-	for _, channel := range event.GetFunctionalChannels(hmip.DEVICE_TYPE_PLUGABLE_SWITCH, hmip.CHANNEL_TYPE_SWITCH) {
-		fmt.Printf("\U000023F0 %s - \U0001F4AC %s: Aktiv %t\n", event.Device.LastStatusUpdate.Time, event.Device.Name, channel.SwitchedOn)
-	}
-}
-
-func LoggingPluggableSwitchMeasuringHandler(event hmip.Event, _ hmip.Origin) {
-	for _, channel := range event.GetFunctionalChannels(hmip.DEVICE_TYPE_PLUGABLE_SWITCH_MEASURING, hmip.CHANNEL_TYPE_SWITCH_MEASURING) {
-		fmt.Printf("\U000023F0 %s - \U0001F4AC %s: Aktiv %t, Consumption %.2fWh\n", event.Device.LastStatusUpdate.Time, event.Device.Name, channel.SwitchedOn, channel.CurrentPowerConsumption)
+	fmt.Printf("\U000023F0 %s - \U0001F4AC: Event of type %s from origin %s (type %s)", time.Now(), event.GetType(), origin.GetID(), origin.GetType())
+	switch specialEvent := event.(type) {
+	case hmip.DeviceChangedEvent:
+		device := specialEvent.GetDevice()
+		channels := device.GetFunctionalChannels()
+		fmt.Printf(" for device %s (type %s)\n", device.GetName(), device.GetType())
+		for _, channel := range channels {
+			switch specialChannel := channel.(type) {
+			case hmip.SwitchChannel:
+				fmt.Printf("\U000023F0 %s - \U0001F4AC %s: Aktiv %t\n", device.GetLastUpdated(), device.GetName(), specialChannel.IsSwitchedOn())
+			case hmip.SwitchMeasuringChannel:
+				fmt.Printf("\U000023F0 %s - \U0001F4AC %s: Aktiv %t, Consumption %.2fWh\n", device.GetLastUpdated(), device.GetName(), specialChannel.IsSwitchedOn(), specialChannel.GetCurrentPowerConsumption())
+			case hmip.ClimateSensorChannel:
+				fmt.Printf("\U000023F0 %s - \U0001F4AC %s: \U0001F321 %.1f°C, \U0001F4A7 %d%%, \U0001F328 %.2f\n",
+					device.GetLastUpdated(),
+					device.GetName(),
+					specialChannel.GetActualTemperature(),
+					specialChannel.GetHumidity(),
+					specialChannel.GetVapourAmount())
+			}
+		}
+	case hmip.GroupChangedEvent:
+		fmt.Printf(" for group %s (type %s)\n", specialEvent.GetGroup().GetName(), specialEvent.GetGroup().GetType())
+	default:
+		fmt.Printf("\n")
 	}
 }

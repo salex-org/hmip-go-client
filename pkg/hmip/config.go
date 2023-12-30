@@ -59,6 +59,38 @@ func GetConfig() (*Config, error) {
 	return &config, nil
 }
 
+func (c *Config) RegisterClient(handshakeCallback func()) error {
+	err := c.lookupEndpoints()
+	if err != nil {
+		return err
+	}
+	c.createClientAuthToken()
+	c.createDeviceID()
+	httpClient := &http.Client{
+		Transport: &homematicRoundTripper{
+			Origin: http.DefaultTransport,
+			config: c,
+		},
+		Timeout: 30 * time.Second,
+	}
+	err = c.connectionRequest(httpClient)
+	if err != nil {
+		return err
+	}
+	handshakeCallback()
+	err = c.requestAcknowledge(httpClient)
+	if err != nil {
+		return err
+	}
+	err = c.requestAuthToken(httpClient)
+	if err != nil {
+		return err
+	}
+	return c.confirmAuthToken(httpClient)
+}
+
+// ======================================================
+
 func (c *Config) createClientAuthToken() {
 	tokenDigest := digest.SHA512.FromBytes([]byte(c.getTrimmedAccessPointSGTIN() + "jiLpVitHvWnIGD1yo7MA"))
 	c.ClientAuthToken = strings.ToUpper(tokenDigest.Hex())
@@ -69,7 +101,7 @@ func (c *Config) createDeviceID() {
 }
 
 func (c *Config) connectionRequest(httpClient *http.Client) error {
-	requestBody, _ := json.Marshal(RegisterClientRequest{
+	requestBody, _ := json.Marshal(registerClientRequest{
 		DeviceID:         c.DeviceID,
 		DeviceName:       c.ClientName,
 		AccessPointSGTIN: c.getTrimmedAccessPointSGTIN(),
@@ -89,7 +121,7 @@ func (c *Config) connectionRequest(httpClient *http.Client) error {
 }
 
 func (c *Config) requestAcknowledge(httpClient *http.Client) error {
-	requestBody, _ := json.Marshal(RegisterClientRequest{
+	requestBody, _ := json.Marshal(registerClientRequest{
 		DeviceID: c.DeviceID,
 	})
 	return retry.Do(func() error {
@@ -113,7 +145,7 @@ func (c *Config) requestAcknowledge(httpClient *http.Client) error {
 }
 
 func (c *Config) requestAuthToken(httpClient *http.Client) error {
-	requestBody, _ := json.Marshal(RegisterClientRequest{
+	requestBody, _ := json.Marshal(registerClientRequest{
 		DeviceID: c.DeviceID,
 	})
 	request, requestErr := http.NewRequest("POST", c.RestEndpoint+"/hmip/auth/requestAuthToken", bytes.NewReader(requestBody))
@@ -128,7 +160,7 @@ func (c *Config) requestAuthToken(httpClient *http.Client) error {
 		_ = Body.Close()
 	}(response.Body)
 	responseBody, _ := io.ReadAll(response.Body)
-	result := GetAuthTokenResponse{}
+	result := getAuthTokenResponse{}
 	responseErr = json.Unmarshal(responseBody, &result)
 	if responseErr != nil {
 		return responseErr
@@ -138,7 +170,7 @@ func (c *Config) requestAuthToken(httpClient *http.Client) error {
 }
 
 func (c *Config) confirmAuthToken(httpClient *http.Client) error {
-	requestBody, _ := json.Marshal(RegisterClientRequest{
+	requestBody, _ := json.Marshal(registerClientRequest{
 		DeviceID:  c.DeviceID,
 		AuthToken: c.AuthToken,
 	})
@@ -154,7 +186,7 @@ func (c *Config) confirmAuthToken(httpClient *http.Client) error {
 		_ = Body.Close()
 	}(response.Body)
 	responseBody, _ := io.ReadAll(response.Body)
-	result := ConfirmAuthTokenResponse{}
+	result := confirmAuthTokenResponse{}
 	responseErr = json.Unmarshal(responseBody, &result)
 	if responseErr != nil {
 		return responseErr
@@ -163,8 +195,8 @@ func (c *Config) confirmAuthToken(httpClient *http.Client) error {
 	return nil
 }
 
-func (c *Config) getClientCharacteristics() ClientCharacteristics {
-	return ClientCharacteristics{
+func (c *Config) getClientCharacteristics() clientCharacteristics {
+	return clientCharacteristics{
 		APIVersion: ApiVersion,
 		ClientName: c.ClientName,
 		DeviceType: DeviceType,
@@ -174,7 +206,7 @@ func (c *Config) getClientCharacteristics() ClientCharacteristics {
 }
 
 func (c *Config) lookupEndpoints() error {
-	requestBody, _ := json.Marshal(HostsLookupRequest{
+	requestBody, _ := json.Marshal(hostsLookupRequest{
 		AccessPointSGTIN:      c.getTrimmedAccessPointSGTIN(),
 		ClientCharacteristics: c.getClientCharacteristics(),
 	})
@@ -189,7 +221,7 @@ func (c *Config) lookupEndpoints() error {
 		_ = Body.Close()
 	}(response.Body)
 	responseBody, _ := io.ReadAll(response.Body)
-	result := HostsLookupResponse{}
+	result := hostsLookupResponse{}
 	err = json.Unmarshal(responseBody, &result)
 	if err != nil {
 		return err
@@ -201,4 +233,42 @@ func (c *Config) lookupEndpoints() error {
 
 func (c *Config) getTrimmedAccessPointSGTIN() string {
 	return strings.ReplaceAll(strings.ToUpper(c.AccessPointSGTIN), "-", "")
+}
+
+// ======================================================
+
+type hostsLookupRequest struct {
+	AccessPointSGTIN      string                `json:"id"`
+	ClientCharacteristics clientCharacteristics `json:"clientCharacteristics"`
+}
+
+type hostsLookupResponse struct {
+	RestEndpoint      string `json:"urlREST"`
+	WebSocketEndpoint string `json:"urlWebSocket"`
+}
+
+type registerClientRequest struct {
+	DeviceID         string `json:"deviceId"`
+	DeviceName       string `json:"deviceName"`
+	AccessPointSGTIN string `json:"sgtin"`
+	AuthToken        string `json:"authToken"`
+}
+
+type getAuthTokenResponse struct {
+	AuthToken string `json:"authToken"`
+}
+
+type confirmAuthTokenResponse struct {
+	ClientID string `json:"clientId"`
+}
+
+type clientCharacteristics struct {
+	APIVersion         string `json:"apiVersion"`
+	ClientName         string `json:"applicationIdentifier"`
+	ClientVersion      string `json:"applicationVersion"`
+	DeviceManufacturer string `json:"deviceManufacturer"`
+	DeviceType         string `json:"deviceType"`
+	Language           string `json:"language"`
+	OSType             string `json:"osType"`
+	OSVersion          string `json:"osVersion"`
 }
