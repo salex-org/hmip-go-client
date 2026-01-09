@@ -1,6 +1,6 @@
 module github.com/salex-org/hmip-go-client
 
-go 1.21
+go 1.25
 
 require (
 	github.com/avast/retry-go/v4 v4.5.0
@@ -8,4 +8,4 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 )
 
-require golang.org/x/net v0.19.0 // indirect
+require golang.org/x/net v0.19.0
