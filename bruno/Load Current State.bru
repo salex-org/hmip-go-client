@@ -1,0 +1,38 @@
+meta {
+  name: Load Current State
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{REST_ENDPOINT}}/hmip/home/getCurrentState
+  body: json
+  auth: inherit
+}
+
+headers {
+  VERSION: 12
+  CLIENTAUTH: {{CLIENT_AUTH_TOKEN}}
+  AUTHTOKEN: {{AUTH_TOKEN}}
+}
+
+body:json {
+  {
+      "clientCharacteristics":
+      {
+          "apiVersion": "12",
+          "applicationIdentifier": "Bruno",
+          "applicationVersion": "9.14.4",
+          "deviceManufacturer": "none",
+          "deviceType": "Computer",
+          "language": "de_DE",
+          "osType": "macOSe",
+          "osVersion": "11.5.1"
+      }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

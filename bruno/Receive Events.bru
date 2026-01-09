@@ -1,0 +1,24 @@
+meta {
+  name: Receive Events
+  type: ws
+  seq: 3
+}
+
+ws {
+  url: {{WSS_ENDPOINT}}
+  body: ws
+  auth: none
+}
+
+headers {
+  AUTHTOKEN: {{AUTH_TOKEN}}
+  CLIENTAUTH: {{CLIENT_AUTH_TOKEN}}
+}
+
+body:ws {
+  name: message 1
+  type: json
+  content: '''
+    {}
+  '''
+}

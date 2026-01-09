@@ -1,0 +1,51 @@
+meta {
+  name: Lookup
+  type: http
+  seq: 1
+}
+
+post {
+  url: https://lookup.homematic.com:48335/getHost
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+      "clientCharacteristics":
+      {
+          "apiVersion": "12",
+          "applicationIdentifier": "Bruno",
+          "applicationVersion": "9.14.4",
+          "deviceManufacturer": "none",
+          "deviceType": "Computer",
+          "language": "de_DE",
+          "osType": "darwin",
+          "osVersion": "11.5.1"
+      },
+      "id": "{{SGTIN}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  const restURL = body.urlREST;
+  const wssURL = body.urlWebSocket;
+  
+  if (!restURL) {
+    throw new Error("Kein Rest URL im Lookup-Response");
+  }
+  
+  if(!wssURL) {
+    throw new Error("Kein WebSocket URL im Lookup-Response");
+  }
+  
+  bru.setEnvVar("REST_ENDPOINT", restURL);
+  bru.setEnvVar("WSS_ENDPOINT", wssURL);
+  
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
