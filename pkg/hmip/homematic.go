@@ -2,27 +2,30 @@ package hmip
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/avast/retry-go/v4"
-	"golang.org/x/net/websocket"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"slices"
+	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 type homematic struct {
 	config              *Config
 	httpClient          *http.Client
 	registrations       []handlerRegistration
-	eventLoopRunning    bool
+	eventLoopMutex      sync.Mutex
+	eventLoopContext    context.Context
+	eventLoopCancelFunc context.CancelFunc
 	eventLoopError      error
 	eventLog            io.Writer
-	websocketConfig     *websocket.Config
+	websocketEndpoint   string
+	websocketDialer     *websocket.Dialer
 	websocketConnection *websocket.Conn
 }
 
@@ -46,16 +49,11 @@ func GetClientWithConfig(config *Config) (Homematic, error) {
 			},
 			Timeout: 30 * time.Second,
 		},
-		eventLoopRunning: false,
-		eventLog:         os.Stdout,
+		eventLog: os.Stdout,
 	}
 	if err == nil {
 		// Initialize websocket configuration
-		client.websocketConfig, err = websocket.NewConfig(config.WebSocketEndpoint, "wss://localhost")
-		if client.websocketConfig != nil {
-			client.websocketConfig.Header.Set("AUTHTOKEN", config.AuthToken)
-			client.websocketConfig.Header.Set("CLIENTAUTH", config.ClientAuthToken)
-		}
+		client.websocketEndpoint = config.WebSocketEndpoint
 	}
 	return client, err
 }
@@ -64,36 +62,45 @@ func (c *homematic) LoadCurrentState() (State, error) {
 	requestBody, _ := json.Marshal(getStateRequest{
 		ClientCharacteristics: c.config.getClientCharacteristics(),
 	})
-	var response *http.Response
-	err := retry.Do(func() error {
-		request, err := http.NewRequest("POST", c.config.RestEndpoint+"/hmip/home/getCurrentState", bytes.NewReader(requestBody))
+	var lastErr error
+	const attempts = 2
+	for i := 0; i < attempts; i++ {
+		request, err := http.NewRequest(
+			http.MethodPost,
+			c.config.RestEndpoint+"/hmip/home/getCurrentState",
+			bytes.NewReader(requestBody),
+		)
 		if err != nil {
-			return retry.Unrecoverable(err)
+			return nil, err
 		}
-		response, err = c.httpClient.Do(request)
+
+		response, err := c.httpClient.Do(request)
 		if err != nil {
-			return err
+			lastErr = err
+		} else {
+			defer response.Body.Close()
+
+			if response.StatusCode != http.StatusOK {
+				lastErr = fmt.Errorf("error on reading state (%s)", response.Status)
+			} else {
+				responseBody, err := io.ReadAll(response.Body)
+				if err != nil {
+					return nil, err
+				}
+
+				state := state{}
+				if err := json.Unmarshal(responseBody, &state); err != nil {
+					return nil, err
+				}
+				return &state, nil
+			}
 		}
-		if response.StatusCode != 200 {
-			return errors.New(fmt.Sprintf("Error on reading state (%s)", response.Status))
-		}
-		return nil
-	}, retry.OnRetry(func(_ uint, _ error) {
+
+		// Vor dem nächsten Versuch neuen Lookup machen
 		_ = c.config.lookupEndpoints()
-	}), retry.Attempts(2))
-	if err != nil {
-		return nil, err
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(response.Body)
-	responseBody, _ := io.ReadAll(response.Body)
-	state := state{}
-	err = json.Unmarshal(responseBody, &state)
-	if err != nil {
-		return nil, err
-	}
-	return &state, nil
+
+	return nil, lastErr
 }
 
 func (c *homematic) RegisterEventHandler(handler EventHandler, eventTypes ...string) {
@@ -108,36 +115,74 @@ func (c *homematic) SetEventLog(writer io.Writer) {
 }
 
 func (c *homematic) ListenForEvents() error {
-	if c.eventLoopRunning {
-		return errors.New("Event loop already running")
+	c.eventLoopMutex.Lock()
+	if c.eventLoopContext != nil {
+		c.eventLoopMutex.Unlock()
+		return fmt.Errorf("Event loop already running")
 	}
-	c.eventLoopRunning = true
-	return retry.Do(c.eventLoop, retry.DelayType(func(n uint, loopErr error, config *retry.Config) time.Duration {
-		c.eventLoopError = loopErr
-		_, _ = fmt.Fprintf(c.eventLog, "Error in event loop: %v\nTry to lookup hosts again\n", loopErr)
-		err := c.config.lookupEndpoints()
-		if err == nil {
-			if c.websocketConfig.Location.String() != c.config.WebSocketEndpoint {
-				c.websocketConfig.Location, err = url.ParseRequestURI(c.config.WebSocketEndpoint)
+	c.eventLoopContext, c.eventLoopCancelFunc = context.WithCancel(context.Background())
+	c.eventLoopError = nil
+	c.eventLoopMutex.Unlock()
+
+	for {
+		if err := c.eventLoop(); err != nil {
+			c.eventLoopMutex.Lock()
+			c.eventLoopError = err
+			c.eventLoopMutex.Unlock()
+
+			// "Echter" Fehler nur, wenn der EventLoopContext nich beendet wurde
+			select {
+			case <-c.eventLoopContext.Done():
+			default:
+				_, _ = fmt.Fprintf(c.eventLog, "Error in event loop: %v\nTry to lookup hosts again\n", err)
+				err := c.config.lookupEndpoints()
 				if err == nil {
-					_, _ = fmt.Fprintf(c.eventLog, "Switching websocket endpoint to %s\nRestarting event loop\n", c.config.WebSocketEndpoint)
-					return 0
+					if c.websocketEndpoint != c.config.WebSocketEndpoint {
+						c.websocketEndpoint = c.config.WebSocketEndpoint
+						_, _ = fmt.Fprintf(c.eventLog, "Switching websocket endpoint to %s\nRestarting event loop\n", c.config.WebSocketEndpoint)
+						continue
+					}
 				}
+				if err != nil {
+					c.eventLoopError = err
+					_, _ = fmt.Fprintf(c.eventLog, "Error during host lookup: %v\n", err)
+				}
+				_, _ = fmt.Fprintf(c.eventLog, "Restarting event loop in 10 minutes\n")
+			}
+
+			timer := time.NewTimer(10 * time.Minute)
+			select {
+			case <-timer.C:
+
+				c.eventLoopMutex.Lock()
+				c.eventLoopError = nil
+				c.eventLoopMutex.Unlock()
+
+				continue
+			case <-c.eventLoopContext.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+
+				c.eventLoopMutex.Lock()
+				c.eventLoopError = nil
+				c.eventLoopCancelFunc = nil
+				c.eventLoopContext = nil
+				c.eventLoopMutex.Unlock()
+
+				return nil
 			}
 		}
-		if err != nil {
-			c.eventLoopError = err
-			_, _ = fmt.Fprintf(c.eventLog, "Error during host lookup: %v\n", err)
-		}
-		_, _ = fmt.Fprintf(c.eventLog, "Restarting event loop in 10 minutes\n")
-		return time.Minute * 10
-	}), retry.Attempts(0))
+	}
 }
 
 func (c *homematic) eventLoop() error {
 	c.eventLoopError = nil // Reset error cache
 	var err error
-	c.websocketConnection, err = websocket.DialConfig(c.websocketConfig)
+	websocketHeader := http.Header{}
+	websocketHeader.Set("AUTHTOKEN", c.config.AuthToken)
+	websocketHeader.Set("CLIENTAUTH", c.config.ClientAuthToken)
+	c.websocketConnection, _, err = c.websocketDialer.Dial(c.websocketEndpoint, websocketHeader)
 	if err != nil {
 		return err
 	}
@@ -148,13 +193,9 @@ func (c *homematic) eventLoop() error {
 	_, _ = fmt.Fprintf(c.eventLog, "\U0001F50C Established connection to %v\n", c.websocketConnection.RemoteAddr())
 	for {
 		message := pushMessage{}
-		err := websocket.JSON.Receive(c.websocketConnection, &message)
+		err := c.websocketConnection.ReadJSON(&message)
 		if err != nil {
-			if c.eventLoopRunning {
-				return err
-			} else {
-				return nil // Error occurred because of terminating the event loop - returning without error
-			}
+			return err
 		}
 		for _, event := range message.Events {
 			for _, registration := range c.registrations {
@@ -171,12 +212,21 @@ func (c *homematic) GetEventLoopState() error {
 }
 
 func (c *homematic) StopEventListening() error {
-	if c.eventLoopRunning {
-		c.eventLoopRunning = false
+	c.eventLoopMutex.Lock()
+	defer c.eventLoopMutex.Unlock()
+
+	if c.eventLoopCancelFunc != nil {
+		c.eventLoopCancelFunc()
 		if c.websocketConnection != nil {
+			err := c.websocketConnection.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			if err != nil {
+				return err
+			}
+
 			return c.websocketConnection.Close()
 		}
 	}
+
 	return nil
 }
 

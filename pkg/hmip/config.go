@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/avast/retry-go/v4"
-	"github.com/google/uuid"
-	"github.com/opencontainers/go-digest"
 	"io"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/opencontainers/go-digest"
 )
 
 const (
@@ -124,24 +124,51 @@ func (c *Config) requestAcknowledge(httpClient *http.Client) error {
 	requestBody, _ := json.Marshal(registerClientRequest{
 		DeviceID: c.DeviceID,
 	})
-	return retry.Do(func() error {
-		request, requestErr := http.NewRequest("POST", c.RestEndpoint+"/hmip/auth/isRequestAcknowledged", bytes.NewReader(requestBody))
-		if requestErr != nil {
-			return retry.Unrecoverable(requestErr)
+
+	const (
+		attempts = 20
+		delay    = 3 * time.Second
+	)
+
+	var lastErr error
+
+	for i := 0; i < attempts; i++ {
+		request, err := http.NewRequest(
+			http.MethodPost,
+			c.RestEndpoint+"/hmip/auth/isRequestAcknowledged",
+			bytes.NewReader(requestBody),
+		)
+		if err != nil {
+			// unrecoverable
+			return err
 		}
-		response, responseErr := httpClient.Do(request)
-		if responseErr != nil {
-			return retry.Unrecoverable(responseErr)
+
+		response, err := httpClient.Do(request)
+		if err != nil {
+			// unrecoverable
+			return err
 		}
-		if response.StatusCode == 200 {
+		response.Body.Close()
+
+		if response.StatusCode == http.StatusOK {
 			return nil
 		}
-		responseErr = errors.New(fmt.Sprintf("Error on waiting for acknowledge of new client (%s)", response.Status))
-		if response.StatusCode == 400 {
-			return responseErr
+
+		lastErr = fmt.Errorf(
+			"error on waiting for acknowledge of new client (%s)",
+			response.Status,
+		)
+
+		if response.StatusCode != http.StatusBadRequest {
+			// unrecoverable
+			return lastErr
 		}
-		return retry.Unrecoverable(requestErr)
-	}, retry.Delay(3*time.Second), retry.DelayType(retry.FixedDelay), retry.Attempts(20))
+
+		// Retry nur bei 400 (Bad Request) nach dem delay
+		time.Sleep(delay)
+	}
+
+	return lastErr
 }
 
 func (c *Config) requestAuthToken(httpClient *http.Client) error {
